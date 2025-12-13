@@ -1,8 +1,9 @@
 main() {
     # Setup environment
     # source ~/.bashrc;
-    # source ~/.bash_profile;
+    source ~/.bash_profile; # for setupATLAS
     source ./experiment_params.sh; set_run_params
+    # alias setupATLAS='source ${ATLAS_LOCAL_ROOT_BASE}/user/atlasLocalSetup.sh'
 
     for exp in "${experiments[@]}"; do
         for i in "${run[@]}"; do
@@ -11,10 +12,10 @@ main() {
                     # TODO:: REPLACE THIS WHEN WE RUN ON PERLMUTTER
                     # run specified experiment with a given container
                     exp_short=${exp%.*}
-                    workdir="./experiments/$exp_short/run_$i/nproc_$nproc/container_$container/"
+                    workdir="./experiments/$exp_short/run$i/$nproc/$container/"
                     logfile=$workdir/exp.log
                     mkdir -p $workdir
-                    setupATLAS -c -el9 --sw-type=$container -m /lcrc/ -r ". ./$experiment $i $nproc $workdir" > $logfile 2>&1
+                    setupATLAS -c -el9 --swtype="$container" -m /lcrc/ -r ". ./$experiment $i $nproc $workdir" > $logfile 2>&1
                 done
             done
         done
