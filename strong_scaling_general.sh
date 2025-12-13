@@ -11,16 +11,12 @@ WEB_DIR="${HOME}/www_atlaspmb"
 
 __run_physlite_daod_darshan() {
     # gather job arguments
+    # nevents_per_proc=${2}
+    # nevents=$((${nproc} * ${nevents_per_proc}))
     nproc=${1}
-    nevents_per_proc=${2}
-    nevents=$((${nproc} * ${nevents_per_proc}))
-    format=${3}
-    inputAODfile=${4}
-    sharedWriter=${5}
+    nevents=-1
     parallelCompression=${6}
-    use_rntuple=${7}
     darshan_config=${8}
-    localdir=${9}
 
     # load darshan with params
     lsetup darshan
@@ -38,25 +34,18 @@ __run_physlite_daod_darshan() {
     mkdir -p $DARSHAN_LOGDIR/$(date +%Y)/$(date +%-m)/$(date +%-d)
     subfolder=$(date +'%Y/%m/%d')
     logfolder=$DARSHAN_LOGDIR/${subfolder//"/0"/"/"}
-    echo Running with nevents=$nevents, formats=$format, use_sw=$sharedWriter, use_pc=$parallelCompression, use_rnt=$use_rntuple and config=$darshan_config
+    echo Running with nevents=$nevents, formats=$format
 
     # setup job
     job_suffix=$(date +%s)
     release_dir=SPOT/MCOverlay/none
     workdir=./
     drv_cmd=" --athenaopts=--preloadlib=$DARSHAN_BASE_DIR/lib/libdarshan.so "
-    drv_cmd+=" --sharedWriter ${sharedWriter}"
-    if ${sharedWriter}
-    then
-        drv_cmd+=" --parallelCompression ${parallelCompression}"
-    fi
+    drv_cmd+=" --sharedWriter true --parallelCompression true"
     echo "working in $workdir"
 
-    # add pre-exec if using rntuple
-    enable_rntuple="import os;print(\"PID:\",os.getpid());"
-    if [[ "${use_rntuple}" = "true" ]]; then
-        enable_rntuple="import os;print(\"PID:\",os.getpid());flags.Output.StorageTechnology.EventData={\"*\":\"ROOTRNTUPLE\"};"
-    fi
+    # print pid in pre-exec
+    print_pid="import os;print(\"PID:\",os.getpid());"
 
     # save darshan config    
     echo Copy darshan config $darshan_config to $workdir
@@ -64,7 +53,7 @@ __run_physlite_daod_darshan() {
     echo [$SECONDS]copy darshan setup to $workdir
 
     # run the derivation job
-    (touch $workdir/job_output.log && python3 $localdir/misc/athenamp_eventorders.py $nproc $nevents_per_proc && ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --athenaMPUseEventOrders True --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${enable_rntuple}" --postExec "default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workdir/job_output.log) 
+    python3 $localdir/misc/athenamp_eventorders.py $nproc $nevents_per_proc && ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --athenaMPUseEventOrders True --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec "default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workdir/job_output.log
     if ! ${sharedWriter}
     then
         echo "Not sharedWriter"
@@ -107,24 +96,6 @@ run_physlite_daod_darshan_parallel_compression() {
 
 # Define and execute the test
 execute() {
-    # Define test parameters
-    JOBNAME="${1}";
-    JOBRELEASE="${2}";
-    JOBPLATFORM="${3}";
-
-    echo "${JOBNAME} - ${JOBRELEASE} - ${JOBPLATFORM}"
-
-    # Define the top-level workdir
-    # WORKDIR="/data/atlaspmb/athenamt-perfmonmt-jobs";
-    WORKDIR="/data/atlaspmb/athenamp-derivation-darshan";
-    # WORKDIR="/lcrc/group/ATLAS/users/ac.wkwiecinski/spot"
-    # WORKDIR=$HOME/athena-derivation-darshan # use a local dir for now
-
-    # todo:: I am assuming this script is ran from its own directory which contains supplemental scripts + configs
-    #        for using darshan
-    LOCALDIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-    echo localdir=$LOCALDIR
-
     # Create the rundir
     RUNDIR="${WORKDIR}/${JOBNAME}/${JOBRELEASE}/${JOBPLATFORM}";
     echo rundir=$RUNDIR
@@ -141,109 +112,11 @@ execute() {
     echo lsetup="asetup Athena,${JOBRELEASE},${JOBPLATFORM//-/,},latest";
     lsetup "asetup Athena,${JOBRELEASE},${JOBPLATFORM//-/,},latest";
 
-    # Check the currently nightly tag
-    nightly=`echo "${Athena_DIR##*/${JOBRELEASE}_Athena_${JOBPLATFORM}/}"`;
-    echo nightly=$nightly
-    nightly=`echo "${nightly%%/Athena/*}"`;
-
     # Check if it exists already
     if [[ -d "${nightly}" ]]; then
         echo "Directory for ${nightly} already exists, nothing to do."
         return 0;
     fi
-
-    # Now setup the run directory
-    mkdir -p "${nightly}"; cd "${nightly}";
-
-    # Let's start
-    touch __start;
-
-    # Now run the job :
-    # 1) Run Derivation w/ Physlite using ttree + shared_writer
-    # 2) Run Derivation w/ Physlite using ttree + shared_writer + parallel compression
-    # 3) Run Derivation w/ Physlite using rntuple + shared writer
-    # 4) Run Derivation w/ Physlite using rntuple + parallel compression
-    if [[ "${JOBNAME}" == "physlite_daod_darshan_shared_writer" ]]; then # shared writer PHYSLITE IO w/ Darshan w/ 16 processes + 1000 events/proc
-        run_physlite_daod_darshan_shared_writer "PHYSLITE" 1000 16 $LOCALDIR;
-    elif [[ "${JOBNAME}" == "physlite_daod_darshan_parallel_compression" ]]; then # pc PHYSLITE IO w/ Darshan w/ 16 processes + 1000 events/proc
-        run_physlite_daod_darshan_parallel_compression "PHYSLITE" 1000 16 $LOCALDIR;
-    elif [[ "${JOBNAME}" == "physlite_daod_darshan_rntuple" ]]; then # rntuple PHYSLITE IO w/ Darshan w/ 16 processes + 1000 events/proc
-        run_physlite_daod_darshan_rntuple "PHYSLITE" 1000 16 $LOCALDIR;
-    elif [[ "${JOBNAME}" == "physlite_daod_darshan_parallel_compression_rntuple" ]]; then
-        run_physlite_daod_darshan_parallel_compression_rntuple "PHYSLITE" 1000 16 $LOCALDIR
-    else
-        echo "Unknown job ${JOBNAME}, quitting..."
-        return 0
-    fi
-
-    # check the pool content
-    for f in *.pool.root*; do
-        checkxAOD.py $f > myDAOD.pool.root.checkfile.txt 2>/dev/null
-    done
-
-    # Cleanup the POOL files to save disk-space
-    # use {,.1} to cleanup extra DAOD file
-    rm -f *.pool.root{,.1};
-    # Let's extract the transform command to be used on the webpage
-    echo "#!/bin/bash" > __command.txt;
-    if [[ -f "env.txt" ]]; then
-        echo "export $( grep "ATHENA_CORE_NUMBER" env.txt )" >> __command.txt;
-    fi
-python3 << END
-import json
-with open("__command.txt","a") as outfile, open("jobReport.json") as infile:
-    data = json.load(infile) # Load the job report
-    cmd = data['cmdLine'].split("' '") # Extract the transform command
-    tf  = cmd[0].split('/')[-1] # This is the main transform, strip away full path
-    cmd = [ f"{val} " if "--" in val else f"'{val}' " for val in cmd[1:] ]
-    cmd = [ val.replace("/data/atlaspmb/","/eos/atlas/atlascerngroupdisk/proj-spot/") for val in cmd ]
-    cmd = [ val.replace("--","\\\\\n  --") for val in cmd ]
-    cmd = [ val.replace("''","'") for val in cmd ]
-    outfile.write(f"{tf} {''.join(cmd)}")
-END
-
-    # Let's archive the results on EOS
-    nightlydate=$( echo "${nightly}" | cut -c1-10 );
-    tokens=( $( echo "${nightlydate}" | tr "-" " " ) );
-    YEAR="${tokens[0]}";
-    MONTH="${tokens[1]}";
-    DAY="${tokens[2]}";
-    TARGET_DIR="${ARCHIVE_DIR}/${DAY}/${MONTH}/${YEAR}/${JOBRELEASE}/${JOBPLATFORM}/spot-mon-${JOBNAME}";
-    echo "Copying results into ${TARGET_DIR}";
-    mkdir -p ${TARGET_DIR};
-
-    # check if target archive dir is empty before doing any syncing
-    if [ -d "$TARGET_DIR" ] && [ -z "$( ls -A $TARGET_DIR )" ]; then
-        # need runargs, worker mapping for plot generation, and save darshan configuration
-        rsync -avuz runargs* worker_mapping.json *.conf ${TARGET_DIR}/.;
-
-        # archive darshan logs for DXT data rto pull from when plotting
-        tar -zcvf ./logs.darshan.tar.gz *.darshan
-        rsync ./logs.darshan.tar.gz ${TARGET_DIR}/.;
-        #rm ./logs.darshan.tar.gz
-
-        # Copy the command to the webpage area
-        TARGET_DIR="${WEB_DIR}/spot-mon-${JOBNAME}/pages/commands";
-        echo "Copying commands into ${TARGET_DIR}";
-        mkdir -p ${TARGET_DIR};
-        rsync -avuz __command.txt ${TARGET_DIR}/${DAY}-${MONTH}-${YEAR}-${JOBRELEASE}-${JOBPLATFORM}-${JOBNAME}
-
-        # Copy the logs to the webpage area
-        TARGET_DIR="${WEB_DIR}/spot-mon-${JOBNAME}/pages/logs";
-        echo "Copying logs into ${TARGET_DIR}";
-        mkdir -p ${TARGET_DIR};
-        for file in $( ls log.* )
-        do
-            tokens=( $( echo "${file}" | tr "." " "  ) );
-            JOBSTEP="${tokens[1]}"
-            rsync -avuz ${file} ${TARGET_DIR}/${DAY}-${MONTH}-${YEAR}-${JOBRELEASE}-${JOBPLATFORM}-${JOBNAME}-${JOBSTEP}
-        done
-    else
-        echo "Archive directory already contains completed run."
-    fi
-
-    # All done
-    touch __done;
 
     # Go back to rundir
     cd "${RUNDIR}";
@@ -253,12 +126,20 @@ END
 run_general_strong() {
     echo "Starting run $1 with processes=$2 and container=$3"
 
-    # params
+    # get parameters
     RUN=$1
     NPROC=$2
     CONTAINER=$3
+    WORKDIR=$4
 
-    # static params
+    # create work directory
+    echo "Run located in $WORKDIR"
+    mkdir -p $WORKDIR; cd $WORKDIR
+
+
+
+    # TODO:: REPLACE THIS WHEN WE RUN ON PERLMUTTER
+    cd ~/PerlmutterExperimentSetup
 }
 
 
@@ -266,20 +147,20 @@ main() {
     # Setup environment
     # source ~/.bashrc;
     # source ~/.bash_profile;
-    source ./experiment_params.sh;
+    # source ./experiment_params.sh; set_run_params
 
-    for i in "${run[@]}"; do
-        for nproc in "${processes[@]}"; do
-            for container in "${container_software[@]}"; do
-                run_general_strong $i $nproc $container
-            done
-        done
-    done
+    # for i in "${run[@]}"; do
+    #     for nproc in "${processes[@]}"; do
+    #         for container in "${container_software[@]}"; do
+    #             # TODO:: REPLACE THIS WHEN WE RUN ON PERLMUTTER
+    #             workdir="./experiments/strong_scaling/run_$i/nproc_$nproc/container_$container/"
+    #             run_general_strong $i $nproc $container $workdir
+    #         done
+    #     done
+    # done
 
-    unset run
-    unset processes
-    unset container_software
+    # unset_run_params
 }
 
 # Execute the main function
-main
+run_general_strong $1 $2 $3 $4
