@@ -15,7 +15,27 @@ main() {
                     workdir="./experiments/$exp_short/run$i/$nproc/$container/"
                     logfile=$workdir/exp.log
                     mkdir -p $workdir
-                    setupATLAS -c -el9 --swtype="$container" -m /lcrc/ -r ". ./$experiment $i $nproc $workdir" > $logfile 2>&1
+                    # setupATLAS -c -el9 --swtype="$container" -m /lcrc/ -r ". ./$experiment $i $nproc $workdir" > $logfile 2>&1
+
+                    case "$container" in
+                        "none")
+                            # um how do we do container-less
+                            setupATLAS
+                            . ./$experiment $i $nproc $workdir
+                            ;;
+                        "apptainer")
+                            # apptainer comes with cvmfs
+                            setupATLAS -c -el9 --swtype="$container" -m /lcrc/ -r ". ./$experiment $i $nproc $workdir" > $logfile 2>&1;;
+                        "shifter")
+                            # we have to do some custom work to use shifter
+                            ;;
+                        "podman")
+                            # we have to do some customer work to use podman
+                            ;;
+                        *)
+                            echo "Unknown container";;
+                    esac
+
                 done
             done
         done
