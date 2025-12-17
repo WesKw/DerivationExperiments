@@ -11,12 +11,14 @@ WEB_DIR="${HOME}/www_atlaspmb"
 
 __run_physlite_daod_darshan() {
     # gather job arguments
-    # nevents_per_proc=${2}
-    # nevents=$((${nproc} * ${nevents_per_proc}))
     nproc=${1}
-    nevents=-1
-    parallelCompression=${6}
-    darshan_config=${8}
+    nevents=${2}
+    format=${3}
+    inputAODfile=${4}
+    darshan_config=${5}
+
+    # setup atlas release
+    asetup Athena,25.0.47
 
     # load darshan with params
     lsetup darshan
@@ -53,7 +55,9 @@ __run_physlite_daod_darshan() {
     echo [$SECONDS]copy darshan setup to $workdir
 
     # run the derivation job
-    python3 $localdir/misc/athenamp_eventorders.py $nproc $nevents_per_proc && ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --athenaMPUseEventOrders True --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec "default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workdir/job_output.log
+    # python3 $localdir/misc/athenamp_eventorders.py $nproc $nevents_per_proc && 
+    # ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --athenaMPUseEventOrders True --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec "default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workdir/job_output.log
+    ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec "default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workdir/job_output.log
     if ! ${sharedWriter}
     then
         echo "Not sharedWriter"
@@ -75,92 +79,59 @@ __run_physlite_daod_darshan() {
         echo Searching for ${logfolder}/*_python_id${_pid}-*.darshan $workdir
         mv -f $logfolder/*_python_id${_pid}-*.darshan $workdir
         export PYTHONPATH=$HOME/.local/lib/python3.11/site-packages:$PYTHONPATH
-        python $localdir/misc/generate_file_trace_csv.py --pid "${_pid}" --logdir "${workdir}" --workers "${workdir}/athenaMP-workers-Derivation-DerivationFramework"
+        python ~/PerlmutterExperimentSetup/generate_file_trace_csv.py --pid "${_pid}" --logdir "${workdir}" --workers "${workdir}/athenaMP-workers-Derivation-DerivationFramework"
     done
     echo "Done."
-    echo $? > __exitcode;
+    # echo $? > __exitcode;
 }
 
 run_physlite_daod_darshan_parallel_compression() {
     FORMAT=${1}
     NEVENTS=${2}
     NPROCS=${3}
-    localdir=${4}
+    CONFIG=${4}
 
     __run_physlite_daod_darshan \
         $NPROCS $NEVENTS $FORMAT /cvmfs/atlas-nightlies.cern.ch/repo/data/data-art/DerivationFrameworkART/mc20_13TeV.410470.PhPy8EG_A14_ttbar_hdamp258p75_nonallhad.recon.AOD.e6337_s3681_r13167/AOD.27162646._000001.pool.root.1 \
-        true true false $(realpath $localdir/darshan_configs/event_IO_env.conf) $localdir
+        $(realpath $CONFIG)
 
     echo $? > __exitcode;
 }
 
-# Define and execute the test
-execute() {
-    # Create the rundir
-    RUNDIR="${WORKDIR}/${JOBNAME}/${JOBRELEASE}/${JOBPLATFORM}";
-    echo rundir=$RUNDIR
-    if [[ ! -d ${RUNDIR} ]]; then
-        mkdir -p ${RUNDIR};
-    fi
-
-    # Go to the main rundir
-    echo "Using ${RUNDIR} as the rundir...";
-    cd "${RUNDIR}";
-
-    setupATLAS
-    # Setup the latest Athena - job runs once per day at a fixed time
-    echo lsetup="asetup Athena,${JOBRELEASE},${JOBPLATFORM//-/,},latest";
-    lsetup "asetup Athena,${JOBRELEASE},${JOBPLATFORM//-/,},latest";
-
-    # Check if it exists already
-    if [[ -d "${nightly}" ]]; then
-        echo "Directory for ${nightly} already exists, nothing to do."
-        return 0;
-    fi
-
-    # Go back to rundir
-    cd "${RUNDIR}";
-    cd $LOCALDIR # return to the dir that launched the script
-}
-
 run_general_strong() {
-    echo "Starting run $1 with processes=$2 and container=$3"
+    echo "Starting run $1 with processes=$2 and container=$3 with config $4"
 
     # get parameters
     RUN=$1
     NPROC=$2
     CONTAINER=$3
-    WORKDIR=$4
+    CONFIG=$4
+    WORKDIR=$5
 
-    # create work directory
-    echo "Run located in $WORKDIR"
-    mkdir -p $WORKDIR; cd $WORKDIR
+    cd $WORKDIR;
 
-
-
-    # TODO:: REPLACE THIS WHEN WE RUN ON PERLMUTTER
-    cd ~/PerlmutterExperimentSetup
+    run_physlite_daod_darshan_parallel_compression "PHYSLITE" 2000 $NPROC $CONFIG
 }
 
 
-main() {
-    # Setup environment
-    # source ~/.bashrc;
-    # source ~/.bash_profile;
-    # source ./experiment_params.sh; set_run_params
+# main() {
+#     # Setup environment
+#     # source ~/.bashrc;
+#     # source ~/.bash_profile;
+#     # source ./experiment_params.sh; set_run_params
 
-    # for i in "${run[@]}"; do
-    #     for nproc in "${processes[@]}"; do
-    #         for container in "${container_software[@]}"; do
-    #             # TODO:: REPLACE THIS WHEN WE RUN ON PERLMUTTER
-    #             workdir="./experiments/strong_scaling/run_$i/nproc_$nproc/container_$container/"
-    #             run_general_strong $i $nproc $container $workdir
-    #         done
-    #     done
-    # done
+#     # for i in "${run[@]}"; do
+#     #     for nproc in "${processes[@]}"; do
+#     #         for container in "${container_software[@]}"; do
+#     #             # TODO:: REPLACE THIS WHEN WE RUN ON PERLMUTTER
+#     #             workdir="./experiments/strong_scaling/run_$i/nproc_$nproc/container_$container/"
+#     #             run_general_strong $i $nproc $container $workdir
+#     #         done
+#     #     done
+#     # done
 
-    # unset_run_params
-}
+#     # unset_run_params
+# }
 
 # Execute the main function
-run_general_strong $1 $2 $3 $4
+run_general_strong $1 $2 $3 $4 $5
