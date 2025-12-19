@@ -16,9 +16,10 @@ __run_physlite_daod_darshan() {
     format=${3}
     inputAODfile=${4}
     darshan_config=${5}
+    release=${6}
 
     # setup atlas release
-    asetup Athena,25.0.47
+    asetup Athena,$release
 
     # load darshan with params
     lsetup darshan
@@ -90,27 +91,29 @@ run_physlite_daod_darshan_parallel_compression() {
     NEVENTS=${2}
     NPROCS=${3}
     CONFIG=${4}
+    RELEASE=${5}
 
     __run_physlite_daod_darshan \
-        $NPROCS $NEVENTS $FORMAT /cvmfs/atlas-nightlies.cern.ch/repo/data/data-art/DerivationFrameworkART/mc20_13TeV.410470.PhPy8EG_A14_ttbar_hdamp258p75_nonallhad.recon.AOD.e6337_s3681_r13167/AOD.27162646._000001.pool.root.1 \
-        $(realpath $CONFIG)
+        $NPROCS $NEVENTS $FORMAT /cvmfs/atlas-nightlies.cern.ch/repo/data/data-art/DerivationFrameworkART/mc20_13TeV.410470.PhPy8EG_A14_ttbar_hdamp258p75_nonallhad.recon.AOD.e6337_s3681_r13167/AOD.27162646._000001.pool.root.1 $(realpath $CONFIG) $RELEASE
 
     echo $? > __exitcode;
 }
 
 run_general_strong() {
-    echo "Starting run $1 with processes=$2 and container=$3 with config $4"
+    echo "Starting run $1 with processes=$2 with config $4"
+    echo "Working in $3"
+    echo $"Using Athena release $5"
 
     # get parameters
     RUN=$1
     NPROC=$2
-    CONTAINER=$3
+    WORKDIR=$3
     CONFIG=$4
-    WORKDIR=$5
+    RELEASE=$5
 
     cd $WORKDIR;
 
-    run_physlite_daod_darshan_parallel_compression "PHYSLITE" 2000 $NPROC $CONFIG
+    run_physlite_daod_darshan_parallel_compression "PHYSLITE" 2000 $NPROC $CONFIG $RELEASE
 }
 
 

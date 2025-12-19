@@ -21,11 +21,12 @@ main() {
                         "none")
                             # um how do we do container-less
                             setupATLAS
-                            . ./$experiment $i $nproc $workdir
+                            . ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release
                             ;;
                         "apptainer")
                             # apptainer comes with cvmfs
-                            setupATLAS -c -el9 --swtype="$container" -m /lcrc/ -r ". ./$experiment $i $nproc $workdir" > $logfile 2>&1;;
+                            setupATLAS -c centos8s --swtype="$container" -m /lcrc/ -r ". ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release" > $logfile 2>&1
+                            ;;
                         "shifter")
                             # we have to do some custom work to use shifter
                             ;;
