@@ -1,7 +1,7 @@
 main() {
     # Setup environment
     # source ~/.bashrc;
-    source ~/.bash_profile; # for setupATLAS
+    # source ~/.bash_profile; # for setupATLAS
     source ./experiment_params.sh; set_run_params
     # alias setupATLAS='source ${ATLAS_LOCAL_ROOT_BASE}/user/atlasLocalSetup.sh'
 
@@ -20,18 +20,19 @@ main() {
                     case "$container" in
                         "none")
                             # um how do we do container-less
-                            setupATLAS
                             . ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release
                             ;;
                         "apptainer")
                             # apptainer comes with cvmfs
-                            setupATLAS -c centos8s --swtype="$container" -m /lcrc/ -r ". ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release" > $logfile 2>&1
+                            source /cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/user/atlasLocalSetup.sh -c centos8s --swtype="$container" -r ". ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release" > $logfile 2>&1
                             ;;
                         "shifter")
                             # we have to do some custom work to use shifter
+                            shifter --image=registry.cern.ch/atlasadc/atlas-grid-centos8s -m cvmfs --env-file=./shifter.env -- ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release
                             ;;
                         "podman")
-                            # we have to do some customer work to use podman
+                            # we have to do some custom work to use podman
+                            podman-hpc 
                             ;;
                         *)
                             echo "Unknown container";;

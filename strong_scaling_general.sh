@@ -18,6 +18,15 @@ __run_physlite_daod_darshan() {
     darshan_config=${5}
     release=${6}
 
+    export ATLAS_LOCAL_ROOT_BASE=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase
+    export DARSHAN_LOG_PATH=$HOME/darshanlogs
+
+    # alias setupATLAS='source ${ATLAS_LOCAL_ROOT_BASE}/user/atlasLocalSetup.sh'
+
+    # run setupATLAS
+    # setupATLAS
+    source ${ATLAS_LOCAL_ROOT_BASE}/user/atlasLocalSetup.sh
+
     # setup atlas release
     asetup Athena,$release
 
@@ -115,26 +124,6 @@ run_general_strong() {
 
     run_physlite_daod_darshan_parallel_compression "PHYSLITE" 2000 $NPROC $CONFIG $RELEASE
 }
-
-
-# main() {
-#     # Setup environment
-#     # source ~/.bashrc;
-#     # source ~/.bash_profile;
-#     # source ./experiment_params.sh; set_run_params
-
-#     # for i in "${run[@]}"; do
-#     #     for nproc in "${processes[@]}"; do
-#     #         for container in "${container_software[@]}"; do
-#     #             # TODO:: REPLACE THIS WHEN WE RUN ON PERLMUTTER
-#     #             workdir="./experiments/strong_scaling/run_$i/nproc_$nproc/container_$container/"
-#     #             run_general_strong $i $nproc $container $workdir
-#     #         done
-#     #     done
-#     # done
-
-#     # unset_run_params
-# }
 
 # Execute the main function
 run_general_strong $1 $2 $3 $4 $5
