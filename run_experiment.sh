@@ -20,6 +20,8 @@ main() {
                     case "$container" in
                         "none")
                             # um how do we do container-less
+                            module load spack
+                            spack env activate atlas
                             . ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release
                             ;;
                         "apptainer")
@@ -28,11 +30,11 @@ main() {
                             ;;
                         "shifter")
                             # we have to do some custom work to use shifter
-                            shifter --image=registry.cern.ch/atlasadc/atlas-grid-centos8s -m cvmfs --env-file=./shifter.env -- ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release
+                            shifter --image=registry.cern.ch/atlasadc/atlas-grid-centos7 -m cvmfs --env-file=./shifter.env -- ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release
                             ;;
                         "podman")
                             # we have to do some custom work to use podman
-                            podman-hpc 
+                            podman-hpc run --rm --mount type=bind,src=/global/homes/w/wkwiecin/,target=/global/homes/w/wkwiecin --mount type=bind,src=/cvmfs,target=/cvmfs --env-file "./shifter.env" -it registry.cern.ch/atlasadc/atlas-grid-centos7 cd /global/homes/w/wkwiecin/PerlmutterExperimentSetup && ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release
                             ;;
                         *)
                             echo "Unknown container";;
