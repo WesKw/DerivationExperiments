@@ -26,15 +26,15 @@ main() {
                             ;;
                         "apptainer")
                             # apptainer comes with cvmfs
-                            source /cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/user/atlasLocalSetup.sh -c centos8s --swtype="$container" -r ". ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release" > $logfile 2>&1
+                            source /cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/user/atlasLocalSetup.sh -c centos7 -m /global/homes/w/wkwiecin/ -m /pscratch/sd/w/wkwiecin/ --swtype="$container" -r ". ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release" > $logfile 2>&1
                             ;;
                         "shifter")
                             # we have to do some custom work to use shifter
-                            shifter --image=registry.cern.ch/atlasadc/atlas-grid-centos7 -m cvmfs --env-file=./shifter.env -- ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release
+                            shifter --image=registry.cern.ch/atlasadc/atlas-grid-centos7 -m cvmfs -m /global/homes/w/wkwiecin/ -m /pscratch/sd/w/wkwiecin/ --env-file=./shifter.env -- ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release
                             ;;
                         "podman")
                             # we have to do some custom work to use podman
-                            podman-hpc run --rm --mount type=bind,src=/global/homes/w/wkwiecin/,target=/global/homes/w/wkwiecin --mount type=bind,src=/cvmfs,target=/cvmfs --env-file "./shifter.env" -it registry.cern.ch/atlasadc/atlas-grid-centos7 cd /global/homes/w/wkwiecin/PerlmutterExperimentSetup && ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release
+                            podman-hpc run --rm --mount type=bind,src=/global/homes/w/wkwiecin/,target=/global/homes/w/wkwiecin --mount type=bind,src=/cvmfs,target=/cvmfs --mount type=bind,src=/global/homes/w/wkwiecin/,target=/global/homes/w/wkwiecin --mount type=bind,src=/pscratch/sd/w/wkwiecin/,target=/pscratch/sd/w/wkwiecin --env-file "./shifter.env" -it registry.cern.ch/atlasadc/atlas-grid-centos7 cd /global/homes/w/wkwiecin/PerlmutterExperimentSetup && ./$exp $i $nproc $workdir $DARSHAN_CONFIG $centos8_ath_release
                             ;;
                         *)
                             echo "Unknown container";;
