@@ -3,12 +3,11 @@
 __run_physlite_daod_darshan() {
     # gather job arguments
     nproc=${1}
+    nevents=$((${nproc} * 1000)) # 1000 events per process for weak scaling.
     format=${2}
     inputAODfile=${3}
     darshan_config=${4}
     release=${5}
-    # 1000 events per process for weak scaling.
-    nevents=$((${nproc} * 1000))
 
     export ATLAS_LOCAL_ROOT_BASE=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase
     export DARSHAN_LOG_PATH=$HOME/darshanlogs
@@ -82,6 +81,9 @@ __run_physlite_daod_darshan() {
         python ~/PerlmutterExperimentSetup/generate_file_trace_csv.py --pid "${_pid}" --logdir "${workdir}" --workers "${workdir}/athenaMP-workers-Derivation-DerivationFramework"
     done
     echo "Done."
+
+    # remove DAOD output
+    rm DAOD_PHYSLITE.pool.root.1
     # echo $? > __exitcode;
 }
 

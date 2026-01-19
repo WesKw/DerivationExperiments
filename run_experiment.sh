@@ -39,7 +39,6 @@ main() {
                         *)
                             echo "Unknown container";;
                     esac
-
                 done
             done
         done

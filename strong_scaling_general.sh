@@ -1,14 +1,5 @@
 #!/bin/bash
 
-# Archive dir
-ARCHIVE_DIR="${HOME}/eos_atlaspmb/archive/custom"
-
-# Web dir
-# The actual EOS path doesn't work w/ mkdir -p
-# Therefore, I'm using a soft-link from ${HOME} instead.
-# See JIRA EOS-4364
-WEB_DIR="${HOME}/www_atlaspmb"
-
 __run_physlite_daod_darshan() {
     # gather job arguments
     nproc=${1}
@@ -20,8 +11,6 @@ __run_physlite_daod_darshan() {
 
     export ATLAS_LOCAL_ROOT_BASE=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase
     export DARSHAN_LOG_PATH=$HOME/darshanlogs
-
-    # alias setupATLAS='source ${ATLAS_LOCAL_ROOT_BASE}/user/atlasLocalSetup.sh'
 
     # run setupATLAS
     # setupATLAS
