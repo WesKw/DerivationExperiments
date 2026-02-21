@@ -8,6 +8,7 @@ __run_physlite_daod_darshan() {
     inputAODfile=${4}
     darshan_config=${5}
     release=${6}
+    limit_cpu=${7}
 
     export ATLAS_LOCAL_ROOT_BASE=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase
     export DARSHAN_LOG_PATH=$HOME/darshanlogs
@@ -40,48 +41,45 @@ __run_physlite_daod_darshan() {
     # setup job
     job_suffix=$(date +%s)
     release_dir=SPOT/MCOverlay/none
-    workdir=./
+    workingdir=./
     drv_cmd=" --athenaopts=--preloadlib=$DARSHAN_BASE_DIR/lib/libdarshan.so "
     drv_cmd+=" --sharedWriter true --parallelCompression true"
-    echo "working in $workdir"
+    echo "working in $workingdir"
 
     # print pid in pre-exec
     print_pid="import os;print(\"PID:\",os.getpid());"
 
     # save darshan config    
-    echo Copy darshan config $darshan_config to $workdir
-    cp -v $darshan_config $workdir
-    echo [$SECONDS]copy darshan setup to $workdir
+    echo Copy darshan config $darshan_config to $workingdir
+    cp -v $darshan_config $workingdir
+    echo [$SECONDS]copy darshan setup to $workingdir
 
-    # run the derivation job
-    # python3 $localdir/misc/athenamp_eventorders.py $nproc $nevents_per_proc && 
-    # ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --athenaMPUseEventOrders True --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec "default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workdir/job_output.log
-    ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec "default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workdir/job_output.log
-    if ! ${sharedWriter}
-    then
-        echo "Not sharedWriter"
-        for f in ${format//_/ }
-        do
-            (DAODMerge_tf.py --inputDAOD_${f}File DAOD_${f}.pool.root.* --outputDAOD_${f}_MRGFile DAOD_${f}.pool.root  --imf False --perfmon none --athenaopts=' --preloadlib=$DARSHAN_BASE_DIR/lib/libdarshan.so' 2>&1 |tee -a $workdir/job_output.log)
-        done
+    if [[ $limit_cpu == "true" ]]; then
+	echo "Limiting to one core"
+        (($nproc == 32)) && nproc=29 # if nproc is 32, not all processes will fit onto 1 core
+	    (($nproc == 256)) && nproc=253
+        
+        ATHENA_CORE_NUMBER=${nproc} taskset -c 0-31 Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec "default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workingdir/job_output.log
+    else
+        
+        ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec "default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workingdir/job_output.log
     fi
     echo "Derivation ${job_suffix} complete"
 
     # save worker mapping to darshan logs
     ls -ltrh $logfolder
-    for lfile in $(find $workdir -type f -name 'log.*')
+    for lfile in $(find $workingdir -type f -name 'log.*')
     do
         echo "logfile=${lfile}"
         l=$(grep -e 'PID: ' $lfile)
         _pid=$(python3 -c "print('$l'.split(' ')[-1])")
         echo job_pid=$_pid
-        echo Searching for ${logfolder}/*_python_id${_pid}-*.darshan $workdir
-        mv -f $logfolder/*_python_id${_pid}-*.darshan $workdir
+        echo Searching for ${logfolder}/*_python_id${_pid}-*.darshan $workingdir
+        mv -f $logfolder/*_python_id${_pid}-*.darshan $workingdir
         export PYTHONPATH=$HOME/.local/lib/python3.11/site-packages:$PYTHONPATH
-        python ~/PerlmutterExperimentSetup/generate_file_trace_csv.py --pid "${_pid}" --logdir "${workdir}" --workers "${workdir}/athenaMP-workers-Derivation-DerivationFramework"
+        python ~/PerlmutterExperimentSetup/generate_file_trace_csv.py --pid "${_pid}" --logdir "${workingdir}" --workers "${workingdir}/athenaMP-workers-Derivation-DerivationFramework"
     done
     echo "Done."
-    # echo $? > __exitcode;
 }
 
 run_physlite_daod_darshan_parallel_compression() {
@@ -90,9 +88,10 @@ run_physlite_daod_darshan_parallel_compression() {
     NPROCS=${3}
     CONFIG=${4}
     RELEASE=${5}
+    LIMT_CPU=${6}
 
     __run_physlite_daod_darshan \
-        $NPROCS $NEVENTS $FORMAT /cvmfs/atlas-nightlies.cern.ch/repo/data/data-art/DerivationFrameworkART/mc20_13TeV.410470.PhPy8EG_A14_ttbar_hdamp258p75_nonallhad.recon.AOD.e6337_s3681_r13167/AOD.27162646._000001.pool.root.1 $(realpath $CONFIG) $RELEASE
+        $NPROCS $NEVENTS $FORMAT /cvmfs/atlas-nightlies.cern.ch/repo/data/data-art/DerivationFrameworkART/mc20_13TeV.410470.PhPy8EG_A14_ttbar_hdamp258p75_nonallhad.recon.AOD.e6337_s3681_r13167/AOD.27162646._000001.pool.root.1 $(realpath $CONFIG) $RELEASE $LIMIT_CPU
 
     echo $? > __exitcode;
 }
@@ -108,11 +107,14 @@ run_general_strong() {
     WORKDIR=$3
     CONFIG=$4
     RELEASE=$5
+    LIMIT_CPU=$6
 
     cd $WORKDIR;
 
-    run_physlite_daod_darshan_parallel_compression "PHYSLITE" 2000 $NPROC $CONFIG $RELEASE
+    ls $WORKDIR;
+
+    run_physlite_daod_darshan_parallel_compression "PHYSLITE" -1 $NPROC $CONFIG $RELEASE $LIMIT_CPU
 }
 
 # Execute the main function
-run_general_strong $1 $2 $3 $4 $5
+run_general_strong $1 $2 $3 $4 $5 $6
