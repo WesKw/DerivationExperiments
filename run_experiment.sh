@@ -4,27 +4,32 @@ main() {
     # source ~/.bash_profile; # for setupATLAS
     source ./experiment_params.sh; set_run_params
     # alias setupATLAS='source ${ATLAS_LOCAL_ROOT_BASE}/user/atlasLocalSetup.sh'
+    starting_dir=$(pwd)
 
     for exp in "${experiments[@]}"; do
         for i in "${run[@]}"; do
             for nproc in "${processes[@]}"; do
                 for container in "${container_software[@]}"; do
+                    # start in original directory
+                    cd $starting_dir;
                     # TODO:: REPLACE THIS WHEN WE RUN ON PERLMUTTER
                     # run specified experiment with a given container
-                    # exp_short=${exp%.*}
+                    exp_short=${exp%.*}
+                    exp_name=$(echo $exp_short | cut -d "_" -f 1,2)
+                    exp_type=$(echo $exp_short | cut -d "_" -f 3);
                     # workdir="./experiments/$exp_short/run$i/$nproc/$container/"
                     # mkdir -p $workdir
 
                     case "$container" in
                         "none")
                             # if we're not using a container we're on aiatlasbm nodes, so we need to use most efficient storage (EOS)
-                            workdir="/tmp/wkwiecin/experiment/"
+                            workdir=$temp_work_directory
                             rm -rf $workdir # clear the workdir before doing anything
                             logfile=$workdir/exp.log
                             mkdir -p $workdir
-                            storage_dir=$(create_storage_directory "weak_scaling" "general" $nproc $container "/eos/user/w/wkwiecin" $limit_to_one_core)
-                            # um how do we do container-less
+                            storage_dir=$(create_storage_directory $exp_name $exp_type $nproc $container $storage_location $limit_to_one_core)
                             . ./$exp $i $nproc $workdir $DARSHAN_CONFIG $ath_release $limit_to_one_core > $logfile 2>&1
+                            # . ./$exp $i $nproc $workdir $DARSHAN_CONFIG $ath_release $limit_to_one_core
                             cp -r $workdir $storage_dir
                             ;;
                         "apptainer")

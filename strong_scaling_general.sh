@@ -3,12 +3,12 @@
 __run_physlite_daod_darshan() {
     # gather job arguments
     nproc=${1}
-    nevents=${2}
-    format=${3}
-    inputAODfile=${4}
-    darshan_config=${5}
-    release=${6}
-    limit_cpu=${7}
+    nevents=-1
+    format=${2}
+    inputAODfile=${3}
+    darshan_config=${4}
+    release=${5}
+    limit_cpu=${6}
 
     export ATLAS_LOCAL_ROOT_BASE=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase
     export DARSHAN_LOG_PATH=$HOME/darshanlogs
@@ -84,14 +84,13 @@ __run_physlite_daod_darshan() {
 
 run_physlite_daod_darshan_parallel_compression() {
     FORMAT=${1}
-    NEVENTS=${2}
-    NPROCS=${3}
-    CONFIG=${4}
-    RELEASE=${5}
-    LIMT_CPU=${6}
+    NPROCS=${2}
+    CONFIG=${3}
+    RELEASE=${4}
+    LIMT_CPU=${5}
 
     __run_physlite_daod_darshan \
-        $NPROCS $NEVENTS $FORMAT /cvmfs/atlas-nightlies.cern.ch/repo/data/data-art/DerivationFrameworkART/mc20_13TeV.410470.PhPy8EG_A14_ttbar_hdamp258p75_nonallhad.recon.AOD.e6337_s3681_r13167/AOD.27162646._000001.pool.root.1 $(realpath $CONFIG) $RELEASE $LIMIT_CPU
+        $NPROCS $FORMAT /cvmfs/atlas-nightlies.cern.ch/repo/data/data-art/DerivationFrameworkART/mc20_13TeV.410470.PhPy8EG_A14_ttbar_hdamp258p75_nonallhad.recon.AOD.e6337_s3681_r13167/AOD.27162646._000001.pool.root.1 $(realpath $CONFIG) $RELEASE $LIMIT_CPU
 
     echo $? > __exitcode;
 }
@@ -99,7 +98,8 @@ run_physlite_daod_darshan_parallel_compression() {
 run_general_strong() {
     echo "Starting run $1 with processes=$2 with config $4"
     echo "Working in $3"
-    echo $"Using Athena release $5"
+    echo "Using Athena release $5"
+    echo "Limiting CPU? $6"
 
     # get parameters
     RUN=$1
@@ -113,7 +113,7 @@ run_general_strong() {
 
     ls $WORKDIR;
 
-    run_physlite_daod_darshan_parallel_compression "PHYSLITE" -1 $NPROC $CONFIG $RELEASE $LIMIT_CPU
+    run_physlite_daod_darshan_parallel_compression "PHYSLITE" $NPROC $CONFIG $RELEASE $LIMIT_CPU
 }
 
 # Execute the main function
