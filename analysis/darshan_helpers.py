@@ -6,10 +6,15 @@ import pandas as pd
 import dask.dataframe as dd
 import re
 import json
+import sys
+sys.path.append("../")
+
+# import generate_file_trace_csv.generate_worker_mapping_via_logdir as generate_worker_mapping_via_logdir
 
 from pathlib import Path
 from glob import glob
 from dataclasses import dataclass
+from generate_file_trace_csv import generate_worker_mapping_via_logdir
 
 METADATA_COLUMNS=["file_name", "id", "process", "basename", "max_events", "nprocs", "container", "limit_cpu", "run"]
 
@@ -51,9 +56,13 @@ def get_runargs_data(directory: Path, df: pd.DataFrame, job: str):
         df["max_events"] = int(max_events)
         df["nprocs"] = int(nprocs)
         df["nthreads"] = int(nthreads)
+        if nprocs == 8:
+            print(directory.parents[1].name)
+            if directory.parents[1].name == "shifter":
+                print("shifter has 8 proc data")
         # print(list(directory.parents))
         df["container"] = directory.parents[1].name
-        df["limit_cpu"] = bool(directory.parents[0].name)
+        df["limit_cpu"] = bool(directory.parents[0].name.capitalize())
         df["run"] = directory.name
         # df["experiment_name"] = directory.parents[3].name
         # df["experiment_type"] = directory.parents[4].name
@@ -227,6 +236,10 @@ def load_dataframe_dxt(workdir: str, experiment_type: str, experiment_name: str,
         # print(log)
         # we absolutely need the workers so this can't fail
         # also this is slow since we're reloading the json with every log
+        # generate the worker mapping if it doesn't exist
+        if not Path(log).parents[0].joinpath("worker_mapping.json").exists():
+            generate_worker_mapping_via_logdir(Path(log).parents[0])
+
         worker_log_mapping = json.load(open(Path(log).parents[0].joinpath("worker_mapping.json")))
         id_to_worker = {data["id"]: worker for worker, data in worker_log_mapping.items()}
         job_id = re.findall(r"id[\d]+-[\d]+", Path(log).name)[0] # guaranteed to find in log file name
@@ -273,6 +286,11 @@ def load_dataframe(workdir: str, experiment_type: str, experiment_name: str, lim
         configuration = set([log_as_path.parents[1].name, log_as_path.parents[2].name, log_as_path.parents[3].name])
         # we absolutely need the workers so this can't fail
         # also this is slow since we're reloading the json with every log
+        # generate the worker mapping if it doesn't exist
+        if not Path(log).parents[0].joinpath("worker_mapping.json").exists():
+            print("Failed to find worker mapping, generating one instead...")
+            generate_worker_mapping_via_logdir(Path(log).parents[0])
+
         worker_log_mapping = json.load(open(Path(log).parents[0].joinpath("worker_mapping.json")))
         id_to_worker = {data["id"]: worker for worker, data in worker_log_mapping.items()}
         job_id = re.findall(r"id[\d]+-[\d]+", Path(log).name)[0] # guaranteed to find in log file name
@@ -293,6 +311,11 @@ def load_dataframe(workdir: str, experiment_type: str, experiment_name: str, lim
 
         last_configuration = configuration
 
+    # concat final df
+    df = dd.concat([df, sub_df])
+    df.compute() # build the dask dataframe
+    sub_df = pd.DataFrame()
+
     if 'file_name' in df.columns:
         df["basename"] = df["file_name"].str.split("/").str[-1]
 
@@ -301,4 +324,3 @@ def load_dataframe(workdir: str, experiment_type: str, experiment_name: str, lim
     df.compute()
 
     return df
-
