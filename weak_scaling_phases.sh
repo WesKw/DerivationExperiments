@@ -54,7 +54,7 @@ __run_physlite_daod_darshan() {
     echo "working in $workingdir"
 
     # print pid in pre-exec
-    print_pid="import os;print(\"PID:\",os.getpid());"
+    print_pid="import os;print(\"PID:\",os.getpid());flags.Output.TreeAutoFlush={\"DAOD_PHYSLITE.pool.root.1\":$auto_flush_size};"
 
     # save darshan config    
     echo Copy darshan config $darshan_config to $workingdir
@@ -68,7 +68,7 @@ __run_physlite_daod_darshan() {
         inputAODfile="$inputAODfile,/tmp/wkwiecin/AOD.27162646._000002.pool.root.1"
     fi
 
-    post_exec="default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];svc=cfg.getService('AthenaPoolSharedIOCnvSvc');svc.PoolAttributes+=[\"DatabaseName='DAOD_PHYSLITE.pool.root.1';ContainerName='TTree=CollectionTree';TREE_AUTO_FLUSH='$auto_flush_size'\"]"
+    post_exec="default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];print(flags.Output.TreeAutoFlush);"
 
     # run the derivation job
     ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec $post_exec --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workingdir/job_output.log
