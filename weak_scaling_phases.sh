@@ -3,12 +3,20 @@
 __run_physlite_daod_darshan() {
     # gather job arguments
     nproc=${1}
-    nevents=-1
+    nevents=$((${nproc} * 1000)) # 1000 events per process for weak scaling.
     format=${2}
     inputAODfile=${3}
     darshan_config=${4}
     release=${5}
-    limit_cpu=${6}
+    auto_flush_size=${6}
+
+    echo "NPROC:$nproc"
+    echo "NEVENTS:$nevents"
+    echo "FORMAT:$format"
+    echo "INPUT:$inputAODfile"
+    echo "CONFIG:$darshan_config"
+    echo "RELEASE:$release"
+    echo "AUTO_FLUSH:$auto_flush_size"
 
     export ATLAS_LOCAL_ROOT_BASE=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase
     export DARSHAN_LOG_PATH=$HOME/darshanlogs
@@ -40,30 +48,31 @@ __run_physlite_daod_darshan() {
 
     # setup job
     job_suffix=$(date +%s)
-    release_dir=SPOT/MCOverlay/none
     workingdir=./
     drv_cmd=" --athenaopts=--preloadlib=$DARSHAN_BASE_DIR/lib/libdarshan.so "
-    drv_cmd+=" --sharedWriter true --parallelCompression true"
+    drv_cmd+=" --sharedWriter true --parallelCompression true"    
     echo "working in $workingdir"
 
     # print pid in pre-exec
-    print_pid="import os;print(\"PID:\",os.getpid());"
+    print_pid="import os;print(\"PID:\",os.getpid());flags.Output.TreeAutoFlush={\"DAOD_PHYSLITE.pool.root.1\":$auto_flush_size};"
 
     # save darshan config    
     echo Copy darshan config $darshan_config to $workingdir
     cp -v $darshan_config $workingdir
     echo [$SECONDS]copy darshan setup to $workingdir
 
-    if [[ $limit_cpu == "true" ]]; then
-	echo "Limiting to one core"
-        (($nproc == 32)) && nproc=29 # if nproc is 32, not all processes will fit onto 1 core
-	    (($nproc == 256)) && nproc=253
-        
-        ATHENA_CORE_NUMBER=${nproc} taskset -c 0-31 Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec "default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workingdir/job_output.log
-    else
-        
-        ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec "default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workingdir/job_output.log
+    # add extra data if we have a large number of processes
+    if (( nproc >= 64 )); then
+        echo Using $nproc procs
+        cp /eos/user/w/wkwiecin/data/AOD.27162646._000002.pool.root.1 /tmp/wkwiecin/
+        inputAODfile="$inputAODfile,/tmp/wkwiecin/AOD.27162646._000002.pool.root.1"
     fi
+
+    post_exec="default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];print(flags.Output.TreeAutoFlush);"
+
+    # run the derivation job
+    ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec $post_exec --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workingdir/job_output.log
+    
     echo "Derivation ${job_suffix} complete"
 
     # save worker mapping to darshan logs
@@ -77,9 +86,12 @@ __run_physlite_daod_darshan() {
         echo Searching for ${logfolder}/*_python_id${_pid}-*.darshan $workingdir
         mv -f $logfolder/*_python_id${_pid}-*.darshan $workingdir
         export PYTHONPATH=$HOME/.local/lib/python3.11/site-packages:$PYTHONPATH
-        python ~/PerlmutterExperimentSetup/generate_file_trace_csv.py --pid "${_pid}" --logdir "${workingdir}" --workers "${workingdir}/athenaMP-workers-Derivation-DerivationFramework"
+        python ~/DerivationExperimentSetup/generate_file_trace_csv.py --pid "${_pid}" --logdir "${workingdir}" --workers "${workingdir}/athenaMP-workers-Derivation-DerivationFramework"
     done
     echo "Done."
+
+    # remove DAOD output
+    rm DAOD_PHYSLITE.pool.root.1
 }
 
 run_physlite_daod_darshan_parallel_compression() {
@@ -87,34 +99,34 @@ run_physlite_daod_darshan_parallel_compression() {
     NPROCS=${2}
     CONFIG=${3}
     RELEASE=${4}
-    LIMT_CPU=${5}
+    AUTO_FLUSH_SIZE=${5}
 
     __run_physlite_daod_darshan \
-        $NPROCS $FORMAT /cvmfs/atlas-nightlies.cern.ch/repo/data/data-art/DerivationFrameworkART/mc20_13TeV.410470.PhPy8EG_A14_ttbar_hdamp258p75_nonallhad.recon.AOD.e6337_s3681_r13167/AOD.27162646._000001.pool.root.1 $(realpath $CONFIG) $RELEASE $LIMIT_CPU
+        $NPROCS $FORMAT /cvmfs/atlas-nightlies.cern.ch/repo/data/data-art/DerivationFrameworkART/mc20_13TeV.410470.PhPy8EG_A14_ttbar_hdamp258p75_nonallhad.recon.AOD.e6337_s3681_r13167/AOD.27162646._000001.pool.root.1 $(realpath $CONFIG) $RELEASE $AUTO_FLUSH_SIZE
 
     echo $? > __exitcode;
 }
 
-run_general_strong() {
-    echo "Starting run $1 with processes=$2 with config $4"
+run_phases_weak() {
+    echo "Starting phases $1 with processes=$2 with config $4"
     echo "Working in $3"
     echo "Using Athena release $5"
-    echo "Limiting CPU? $6"
+    echo "Running with autoflush size=$6"
 
     # get parameters
     RUN=$1
     NPROC=$2
-    WORKDIR=$3
+    WORKLOC=$3
     CONFIG=$4
     RELEASE=$5
-    LIMIT_CPU=$6
+    AUTO_FLUSH_SIZE=$6
 
-    cd $WORKDIR;
+    cd $WORKLOC;
 
-    ls $WORKDIR;
+    ls $WORKLOC;
 
-    run_physlite_daod_darshan_parallel_compression "PHYSLITE" $NPROC $CONFIG $RELEASE $LIMIT_CPU
+    run_physlite_daod_darshan_parallel_compression "PHYSLITE" $NPROC $CONFIG $RELEASE $AUTO_FLUSH_SIZE
 }
 
 # Execute the main function
-run_general_strong $1 $2 $3 $4 $5 $6
+run_phases_weak $1 $2 $3 $4 $5 $6

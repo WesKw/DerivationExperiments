@@ -13,6 +13,8 @@ set_run_params() {
 
     export experiments=("strong_scaling_general.sh")
     export ath_release="25.0.51"
+    export temp_work_directory="/tmp/wkwiecin/experiment/"
+    export storage_location="/eos/user/w/wkwiecin"
 
 
     # CONSTANT PARAMS
