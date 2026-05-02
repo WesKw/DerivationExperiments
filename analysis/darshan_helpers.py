@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from random import randrange
 
 import darshan as dardarbinks
 import darshan.backend.cffi_backend as backend
@@ -16,7 +17,7 @@ from glob import glob
 from dataclasses import dataclass
 from generate_file_trace_csv import generate_worker_mapping_via_logdir
 
-METADATA_COLUMNS=["file_name", "id", "process", "basename", "max_events", "nprocs", "container", "limit_cpu", "run"]
+METADATA_COLUMNS=["file_name", "id", "process", "basename", "max_events", "nprocs", "container", "run"]
 
 
 @dataclass
@@ -55,14 +56,14 @@ def get_runargs_data(directory: Path, df: pd.DataFrame, job: str):
 
         df["max_events"] = int(max_events)
         df["nprocs"] = int(nprocs)
-        df["nthreads"] = int(nthreads)
-        if nprocs == 8:
-            print(directory.parents[1].name)
-            if directory.parents[1].name == "shifter":
-                print("shifter has 8 proc data")
+        # df["nthreads"] = int(nthreads)
+        # if nprocs == 8:
+        #     print(directory.parents[1].name)
+        #     if directory.parents[1].name == "shifter":
+        #         print("shifter has 8 proc data")
         # print(list(directory.parents))
         df["container"] = directory.parents[1].name
-        df["limit_cpu"] = bool(directory.parents[0].name.capitalize())
+        # df["limit_cpu"] = directory.parents[0].name.capitalize()
         df["run"] = directory.name
         # df["experiment_name"] = directory.parents[3].name
         # df["experiment_type"] = directory.parents[4].name
@@ -108,7 +109,8 @@ def load_darshan_data_dxt(log_file: str, dxt_operations: list = [], dxt_include=
     # dxt_df = dd.from_pandas(pd.DataFrame(columns=['id', 'file_name', 'hostname', 'operation', 'offset', 'length', 'start_time', 'end_time']))
     # dxt_df = pd.DataFrame(columns=["id", "operation", "offset", "length", "start_time", "end_time"])
     dxt_df = pd.DataFrame(columns=["id", "operation"] + dxt_include)
-    to_drop = set("offset", "length", "start_time", "end_time") - set(dxt_include)
+    # to_drop = set(["offset", "length", "start_time", "end_time"]) - set(dxt_include)
+    to_drop=[]
 
     if "DXT_POSIX" in report.records:
         dxt_data = report.records["DXT_POSIX"].to_df() # list not a dict
@@ -119,22 +121,30 @@ def load_darshan_data_dxt(log_file: str, dxt_operations: list = [], dxt_include=
             
             # pull dxt data into a single dataframe
             if not data['write_segments'].empty and 'write' in dxt_operations:
+                # print(data['write_segments'])
                 data['write_segments'].insert(0, 'operation', 'write')
                 data['write_segments'].insert(0, 'id', file_id)
-                data['write_segments'] = data['write_segments'].drop(columns=to_drop)
+                # data['write_segments'] = data['write_segments'].drop(columns=to_drop)
                 # data['write_segments'].insert(0, 'file_name', file_names[file_id])
                 # data['write_segments'].insert(0, 'hostname', host)
                 dxt_df = pd.concat([dxt_df, data['write_segments']], ignore_index=True)
 
             if not data['read_segments'].empty and 'read' in dxt_operations:
+                # print(data['read_segments'])
                 data['read_segments'].insert(0, 'operation', 'read')
                 data['read_segments'].insert(0, 'id', file_id)
-                data['read_segments'] = data['read_segments'].drop(columns=to_drop)
+                # data['read_segments'] = data['read_segments'].drop(columns=to_drop)
                 # data['read_segments'].insert(0, 'file_name', file_names[file_id])
                 # data['read_segments'].insert(0, 'hostname', host)
+                # print(dxt_df)
+                # if dxt_df.empty:
+                #     print(dxt_df)
+                # print(type(data["read_segments"]))
+                # print(data["read_segments"])
                 dxt_df = pd.concat([dxt_df, data['read_segments']], ignore_index=True)
 
     get_runargs_data(Path(log_file).parents[0], dxt_df, job="Derivation")
+    # print(dxt_df)
     return dxt_df
 
 
@@ -217,23 +227,33 @@ def load_darshan_data(log_file: str, worker: str, modules: list, analysis_func: 
     return df
 
 
-def load_dataframe_dxt(workdir: str, experiment_type: str, experiment_name: str, limit_cpu: bool, dxt_operations: list=[], analysis_func: Callable=None) -> dd.DataFrame:
+def load_dataframe_dxt(workdir: str, experiment_type: str, experiment_name: str, limit_cpu: bool, limit_runs: bool, dxt_operations: list=[], analysis_func: Callable=None) -> dd.DataFrame:
     print("Parameters:")
     print("workdir: ", workdir)
     print("experiment_type: ", experiment_type)
     print("experiment_name: ", experiment_name)
     print("limit_cpu: ", limit_cpu)
+    print("limit_runs: ", limit_runs)
+    # run_to_pick = "*" if not limit_runs else randrange(1, 6)
+    run_to_pick = "*" if not limit_runs else "1" # 1 is always guaranteed to exist
 
     data_paths = \
-        sorted(glob(str(Path(workdir, experiment_type, experiment_name, "*", "*", str(limit_cpu).lower(), "*", "*.darshan"))))
+        sorted(glob(str(Path(workdir, experiment_type, experiment_name, "*", "*", str(limit_cpu).lower(), f"{run_to_pick}", "*.darshan"))))
 
-    df = dd.from_pandas(pd.DataFrame(columns=["id", "operation", "offset", "length", "start_time", "end_time"]))
-    data_frames = []
-    max_concat = 50
-    concat_amt = 0
+    # df = dd.from_pandas(pd.DataFrame(columns=["id", "operation", "offset", "length", "start_time", "end_time"]))
+    df = pd.DataFrame()
+    sub_df = pd.DataFrame()
+    last_configuration = None
+    total_logs = len(data_paths)
+    log_ctr = 0
 
     for log in data_paths:
+        log_ctr += 1
+        print(f"Processing log {log_ctr} / {total_logs}")
         # print(log)
+
+        log_as_path = Path(log)
+        configuration = set([log_as_path.parents[1].name, log_as_path.parents[2].name, log_as_path.parents[3].name])
         # we absolutely need the workers so this can't fail
         # also this is slow since we're reloading the json with every log
         # generate the worker mapping if it doesn't exist
@@ -246,19 +266,41 @@ def load_dataframe_dxt(workdir: str, experiment_type: str, experiment_name: str,
         pid = job_id.split("-")[1]
         worker = id_to_worker.get(pid, "main") # if it's not in the mapping it's the main process
 
-        frame = load_darshan_data_dxt(log, dxt_operations)
+        # frame = load_darshan_data_dxt(log, dxt_operations)
         # df = dd.concat([df, frame.dataframe]) # keep only desired columns
-        data_frames.append(frame)
+        # data_frames.append(frame)
 
-        concat_amt += 1
-        if concat_amt >= max_concat:
-            print("Concatenating data frames...")
-            df = dd.concat([df] + [f for f in data_frames], ignore_index=True)
-            data_frames = []
-            concat_amt = 0
+        # concat_amt += 1
+        # if concat_amt >= max_concat:
+        #     print("Concatenating data frames...")
+        #     df = dd.concat([df] + [f for f in data_frames], ignore_index=True)
+        #     data_frames = []
+        #     concat_amt = 0
+            # print(df)
+
+        if last_configuration and configuration != last_configuration:
+            print("Configuration change detected, concatenating data frames...")
+            print("Running callable if available...")
+            if analysis_func:
+                sub_df = analysis_func(sub_df)
+
+            df = pd.concat([df, sub_df])
+            # df.compute() # build the dask dataframe
+            sub_df = pd.DataFrame()
+            print(df)
+
+        # then continue dataframe computation
+        log_df = load_darshan_data_dxt(log, dxt_operations)
+        sub_df = pd.concat([sub_df, log_df])
+
+        last_configuration = configuration
 
     # if 'file_name' in df.columns:
     #     df["basename"] = df["file_name"].str.split("/").str[-1]
+    # concat final df
+    df = pd.concat([df, sub_df])
+    # df.compute() # build the dask dataframe
+    sub_df = pd.DataFrame()
 
     print("Logs loaded")
     return df
