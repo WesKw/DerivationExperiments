@@ -68,17 +68,28 @@ __run_physlite_daod_darshan() {
         inputAODfile="$inputAODfile,/tmp/wkwiecin/AOD.27162646._000002.pool.root.1"
     fi
 
-    post_exec="default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];svc=cfg.getService('AthenaPoolSharedIOCnvSvc');svc.PoolAttributes+=[\"DatabaseName='DAOD_PHYSLITE.pool.root.1';ContainerName='TTree=CollectionTree';TREE_AUTO_FLUSH='$auto_flush_size'\"];print(svc.PoolAttributes);"
+    post_exec="default:cfg.getService(\"AthMpEvtLoopMgr\").ExecAtPreFork=[\"AthCondSeq\"];"
 
     # run the derivation job
-    (ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec $post_exec --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workingdir/job_output.log) & \
-    (Sim_tf.py --perfmon none )
+    (ATHENA_CORE_NUMBER=${nproc} Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents ${nevents} --multiprocess True  --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec "$post_exec" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workingdir/job_output.log) &
+
+    derivation_pid=$! # wait on derivation to finish
+    echo $derivation_pid
+
+    # run a simulation in the background
+    (mkdir ./subrun && cd ./subrun && export LD_LIBRARY_PATH="$DARSHAN_BASE_DIR/lib:$LD_LIBRARY_PATH" && Sim_tf.py --perfmon none --athenaopts="--threads=4" --multithreaded true --maxEvents 150 --randomSeed 42 --inputEVNTFile /cvmfs/atlas-nightlies.cern.ch/repo/data/data-art/PhaseIIUpgrade/EVNT/mc21_14TeV.601229.PhPy8EG_A14_ttbar_hdamp258p75_SingleLep.evgen.EVNT.e8481/EVNT.33964680._002197.pool.root.1 --outputHITSFile testHITS.pool.root --simulator "FullG4MT" --conditionsTag 'default:OFLCOND-MC21-SDR-RUN4-02' --geometryVersion 'default:ATLAS-P2-RUN4-03-00-00' --postInclude 'default:PyJobTransforms.UseFrontier' --preInclude 'EVNTtoHITS:Campaigns.PhaseIISimulation' --env "EVNTtoHITS:LD_PRELOAD=$DARSHAN_BASE_DIR/lib/libdarshan.so") &
+
+    # (mkdir ./derv_run && cd ./derv_run && ATHENA_CORE_NUMBER=4 Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents 3500 --multiprocess True --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --postExec "$post_exec" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee ./job_output.log) &
+
+    # (mkdir ./subrun && cd ./subrun Derivation_tf.py --inputAODFile=${inputAODfile} --maxEvents 3000 --multiprocess True --athenaopts="--threads=4" --athenaMPMergeTargetSize "DAOD_*:0" --formats ${format//_/ } --outputDAODFile pool.root.1 --CA "all:True" --preExec "${print_pid}" --postExec "$post_exec" --multithreadedFileValidation False --imf False ${drv_cmd} 2>&1 |tee $workingdir/job_output.log)
+
+    wait
     
     echo "Derivation ${job_suffix} complete"
 
     # save worker mapping to darshan logs
     ls -ltrh $logfolder
-    for lfile in $(find $workingdir -type f -name 'log.*')
+    for lfile in $(find $workingdir -type f -name 'log.Derivation')
     do
         echo "logfile=${lfile}"
         l=$(grep -e 'PID: ' $lfile)
@@ -88,11 +99,14 @@ __run_physlite_daod_darshan() {
         mv -f $logfolder/*_python_id${_pid}-*.darshan $workingdir
         export PYTHONPATH=$HOME/.local/lib/python3.11/site-packages:$PYTHONPATH
         python ~/DerivationExperimentSetup/generate_file_trace_csv.py --pid "${_pid}" --logdir "${workingdir}" --workers "${workingdir}/athenaMP-workers-Derivation-DerivationFramework"
+        # move the rest of the logs to the sim run folder
+        cp -f $logfolder/*_python_id*.darshan $workingdir/subrun/
     done
     echo "Done."
 
     # remove DAOD output
     rm DAOD_PHYSLITE.pool.root.1
+    rm subrun/testHITS.pool.root
 }
 
 run_physlite_daod_darshan_parallel_compression() {
