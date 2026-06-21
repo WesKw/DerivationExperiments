@@ -63,6 +63,7 @@ def get_runargs_data(directory: Path, df: pd.DataFrame, job: str):
         #         print("shifter has 8 proc data")
         # print(list(directory.parents))
         df["container"] = directory.parents[1].name
+        df["option"] = directory.parents[0].name
         # df["limit_cpu"] = directory.parents[0].name.capitalize()
         df["run"] = directory.name
         # df["experiment_name"] = directory.parents[3].name
@@ -111,6 +112,7 @@ def load_darshan_data_dxt(log_file: str, dxt_operations: list = [], dxt_include=
     dxt_df = pd.DataFrame(columns=["id", "operation"] + dxt_include)
     # to_drop = set(["offset", "length", "start_time", "end_time"]) - set(dxt_include)
     to_drop=[]
+    name_records = report.name_records
 
     if "DXT_POSIX" in report.records:
         dxt_data = report.records["DXT_POSIX"].to_df() # list not a dict
@@ -144,6 +146,7 @@ def load_darshan_data_dxt(log_file: str, dxt_operations: list = [], dxt_include=
                 dxt_df = pd.concat([dxt_df, data['read_segments']], ignore_index=True)
 
     get_runargs_data(Path(log_file).parents[0], dxt_df, job="Derivation")
+    dxt_df["file_name"] = dxt_df["id"].map(name_records)
     # print(dxt_df)
     return dxt_df
 
@@ -227,18 +230,17 @@ def load_darshan_data(log_file: str, worker: str, modules: list, analysis_func: 
     return df
 
 
-def load_dataframe_dxt(workdir: str, experiment_type: str, experiment_name: str, limit_cpu: bool, limit_runs: bool, dxt_operations: list=[], analysis_func: Callable=None) -> dd.DataFrame:
+def load_dataframe_dxt(workdir: str, experiment_type: str, experiment_name: str, limit_runs: bool, dxt_operations: list=[], analysis_func: Callable=None) -> dd.DataFrame:
     print("Parameters:")
     print("workdir: ", workdir)
     print("experiment_type: ", experiment_type)
     print("experiment_name: ", experiment_name)
-    print("limit_cpu: ", limit_cpu)
     print("limit_runs: ", limit_runs)
     # run_to_pick = "*" if not limit_runs else randrange(1, 6)
     run_to_pick = "*" if not limit_runs else "1" # 1 is always guaranteed to exist
 
     data_paths = \
-        sorted(glob(str(Path(workdir, experiment_type, experiment_name, "*", "*", str(limit_cpu).lower(), f"{run_to_pick}", "*.darshan"))))
+        sorted(glob(str(Path(workdir, experiment_type, experiment_name, "*", "*", "*", f"{run_to_pick}", "*.darshan"))))
 
     # df = dd.from_pandas(pd.DataFrame(columns=["id", "operation", "offset", "length", "start_time", "end_time"]))
     df = pd.DataFrame()
@@ -287,12 +289,12 @@ def load_dataframe_dxt(workdir: str, experiment_type: str, experiment_name: str,
             df = pd.concat([df, sub_df])
             # df.compute() # build the dask dataframe
             sub_df = pd.DataFrame()
-            print(df)
+            # print(df)
 
         # then continue dataframe computation
         log_df = load_darshan_data_dxt(log, dxt_operations)
+        log_df["worker"] = worker
         sub_df = pd.concat([sub_df, log_df])
-
         last_configuration = configuration
 
     # if 'file_name' in df.columns:
@@ -316,7 +318,7 @@ def load_dataframe(workdir: str, experiment_type: str, experiment_name: str, lim
     print("modules: ", modules)
 
     data_paths = \
-        sorted(glob(str(Path(workdir, experiment_type, experiment_name, "*", "*", str(limit_cpu).lower(), "*", "*.darshan"))))
+        sorted(glob(str(Path(workdir, experiment_type, experiment_name, "*", "*", str(limit_cpu).lower(), "?", "*.darshan"))))
 
     df = dd.from_pandas(pd.DataFrame())
     sub_df = pd.DataFrame()
