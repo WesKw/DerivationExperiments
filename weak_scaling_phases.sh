@@ -54,7 +54,7 @@ __run_physlite_daod_darshan() {
     echo "working in $workingdir"
 
     # print pid in pre-exec
-    print_pid="import os;print(\"PID:\",os.getpid());flags.Output.TreeAutoFlush={\"DAOD_PHYSLITE.pool.root.1\":$auto_flush_size};"
+    print_pid="import os;print(\"PID:\",os.getpid());flags.Output.TreeAutoFlush={\"DAOD_PHYSLITE\":$auto_flush_size};"
 
     # save darshan config    
     echo Copy darshan config $darshan_config to $workingdir
