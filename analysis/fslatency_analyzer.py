@@ -51,9 +51,12 @@ def _resolve_mount(filename, mount_points):
     if not filename:
         return 'N/A'
     for mount_path, fs_type in mount_points:
+        if filename.endswith('testHITS.pool.root'):
+            return '/pscratch/sd/w/wkwiecin'
         if filename.startswith(mount_path):
             return mount_path
     # Heuristic fallback: first two path components
+        
     parts = Path(filename).parts
     if len(parts) >= 3:
         return str(Path(*parts[:3]))
@@ -178,6 +181,10 @@ def analyze_log(log_path, max_size, min_ops, io_filter=None, fs_pattern=None):
                 filename  = report.name_records.get(record_id)
                 mount_pt  = _resolve_mount(filename, mount_points)
 
+                if filename.endswith('testHITS.pool.root'):
+                    print("Processing testhits")
+                    print(fs_max_size)
+
                 if mount_pt in EXCLUDED_MOUNT_PREFIXES:
                     continue
 
@@ -266,6 +273,9 @@ def analyze_log(log_path, max_size, min_ops, io_filter=None, fs_pattern=None):
                             if seg_frames else pd.DataFrame()).sort_values('start_time')
                     traces['id'] = dxt_dfs['id']
                     traces['hostname'] = dxt_dfs['hostname']
+
+                    # if 'pscratch' in traces['hostname']:
+                    #     print('found testHITS')
 
                     if not traces.empty:
                         traces = traces.sort_values(['rank', 'start_time']) \
@@ -1137,6 +1147,11 @@ def main():
         return
  
     print(f"\nSelecting best probe per filesystem:")
+    # for result in all_results:
+    #     for candidate in result["candidates"]:
+
+    #         print(candidate)
+    #     print(result)
     best = select_best_probes(all_results)
  
     print(f"\nTop Probe Candidates (best per FS × op_type, across {len(all_results)} log(s)):")
